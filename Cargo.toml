@@ -1,0 +1,12 @@
+[package]
+name = "easy_totp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.13.0"
+image = "0.24.0"
+
+[dependencies.totp-rs]
+version = "^5.3"
+features = ["qr"]
