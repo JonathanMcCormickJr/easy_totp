@@ -107,6 +107,7 @@ mod tests {
     use rqrr;
     use std::fs;
     use std::io::Write;
+    use std::{thread, time};
 
     #[test]
     fn test_qr_png() {
@@ -115,7 +116,9 @@ mod tests {
         let account_name = String::from("test@test-email.com");
         let filename = "./test_images/qr_code.png";
 
-        match EasyTotp::create_qr_png(raw_secret, issuer, account_name) {
+        let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
+
+        match my_qr_code {
             Ok(png_data) => {
                 let mut file = fs::File::create(filename).unwrap();
                 file.write_all(&png_data).unwrap();
@@ -142,5 +145,28 @@ mod tests {
 
         // Delete file
         fs::remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_code_generation() {
+        let raw_secret = String::from("SUPERSecretSecretSecret");
+        let issuer = Some(String::from("McCormick"));
+        let account_name = String::from("test@test-email.com");
+
+        let token1 =
+            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+                .unwrap();
+        let token2 =
+            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+                .unwrap();
+
+        assert_eq!(token1, token2);
+
+        thread::sleep(time::Duration::from_secs(30));
+
+        let token3 =
+            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+                .unwrap();
+        assert_ne!(token1, token3);
     }
 }
