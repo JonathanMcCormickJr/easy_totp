@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Jonathan A. McCormick, Jr."]
 license = "MIT"
-homepage = "https://"
+homepage = "https://github.com/JonathanMcCormickJr/easy_totp"
+repository = "https://github.com/JonathanMcCormickJr/easy_totp"
+documentation = "https://github.com/JonathanMcCormickJr/easy_totp"
+description = "TOTP in Rust, but with just a few simple functions to call."
 
 [dependencies]
 base64 = "0.13.0"
