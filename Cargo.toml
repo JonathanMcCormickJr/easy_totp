@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 base64 = "0.13.0"
-image = "0.24.0"
+image = "0.25"
+png = "0.17.16"
+rqrr = "0.10.0"
 
 [dependencies.totp-rs]
 version = "^5.3"
