@@ -7,10 +7,11 @@ TOTP in Rust, but with just a few simple functions to call.
 ## Creating a QR code for TOTP setup
 
 ```rust 
+use easy_totp::EasyTotp;
+
 let raw_secret = String::from("SUPERSecretSecretSecret");
 let issuer = Some(String::from("McCormick"));
 let account_name = String::from("test@test-email.com");
-let filename = "./test_images/qr_code.png";
 
 let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
 ```
@@ -18,6 +19,10 @@ let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
 ## Saving that QR code to a file
 
 ```rust
+use easy_totp::EasyTotp;
+use std::fs;
+use std::io::Write;
+
 let raw_secret = String::from("SUPERSecretSecretSecret");
 let issuer = Some(String::from("McCormick"));
 let account_name = String::from("test@test-email.com");
@@ -40,6 +45,8 @@ match my_qr_code {
 ## Generating TOTP codes for authentication
 
 ```rust
+use easy_totp::EasyTotp;
+
 let raw_secret = String::from("SUPERSecretSecretSecret");
 let issuer = Some(String::from("McCormick"));
 let account_name = String::from("test@test-email.com");
