@@ -64,19 +64,19 @@ use std::fmt;
 use std::io::Cursor;
 
 #[derive(Debug)]
-struct EasyTotpError<'a>(&'a str);
+struct EasyTotpError(String);
 
-impl<'a> fmt::Display for EasyTotpError<'a> {
+impl fmt::Display for EasyTotpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "EasyTotp encuntered an error: {}", self.0)
     }
 }
 
-impl<'a> Error for EasyTotpError<'a> {}
+impl Error for EasyTotpError {}
 
-impl<'a> EasyTotpError<'a> {
-    fn new(message: &'a str) -> Self {
-        EasyTotpError(message)
+impl EasyTotpError {
+    fn new(message: &str) -> Self {
+        EasyTotpError(message.to_string())
     }
 }
 
@@ -88,14 +88,14 @@ impl EasyTotp {
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
-    ) -> Result<TOTP, String> {
+    ) -> Result<TOTP, EasyTotpError> {
         let secret;
         let result_secret = Secret::Raw(raw_secret.as_bytes().to_vec()).to_bytes();
 
         if let Ok(okay_secret) = result_secret {
             secret = okay_secret;
         } else {
-            return Err(String::from("Failed to parse secret key"));
+            return Err(EasyTotpError::new("Failed to parse secret key"));
         }
 
         let result = TOTP::new(Algorithm::SHA512, 6, 1, 30, secret, issuer, account_name);
@@ -103,7 +103,7 @@ impl EasyTotp {
         if let Ok(okay_result) = result {
             Ok(okay_result)
         } else {
-            Err(String::from("Error creating new TOTP instance"))
+            Err(EasyTotpError::new("Error creating new TOTP instance"))
         }
     }
 
@@ -111,13 +111,13 @@ impl EasyTotp {
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<String, EasyTotpError> {
         let result = Self::new_totp(raw_secret, issuer, account_name)?.get_qr_base64();
 
         if let Ok(okay_result) = result {
             Ok(okay_result)
         } else {
-            Err(Box::new(EasyTotpError::new("Error creating QR code data")))
+            Err(EasyTotpError::new("Error creating QR code data"))
         }
     }
 
