@@ -85,6 +85,7 @@ impl EasyTotpError {
 pub struct EasyTotp;
 
 impl EasyTotp {
+    /// Creates a new TOTP instance
     fn new_totp(
         raw_secret: String,
         issuer: Option<String>,
@@ -147,6 +148,8 @@ impl EasyTotp {
     /// Render the QR code in the terminal
     /// 
     /// BEWARE: terminal will display secret!!
+    /// 
+    /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
     pub fn render_qr_terminal(
         raw_secret: String,
         issuer: Option<String>,
@@ -161,7 +164,7 @@ impl EasyTotp {
 
 
         // Determine scaling factor to fit terminal
-        let terminal_width = 80; // Typical terminal width in characters
+        let terminal_width = 100; // Typical terminal width in characters
         let scale_x = width / terminal_width;
         let scale_y = scale_x * 2; // Height is doubled for character aspect ratio
 
