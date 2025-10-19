@@ -59,16 +59,17 @@
 use totp_rs::{Algorithm, Secret, TOTP};
 
 use base64::decode;
+use image::{ImageBuffer, Luma};
 use std::error::Error;
 use std::fmt;
-use std::io::Cursor;
+use std::io::{Cursor, stdout, Write};
 
 #[derive(Debug)]
 struct EasyTotpError(String);
 
 impl fmt::Display for EasyTotpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EasyTotp encuntered an error: {}", self.0)
+        write!(f, "EasyTotp encountered an error: {}", self.0)
     }
 }
 
@@ -143,6 +144,60 @@ impl EasyTotp {
         Ok(buffer)
     }
 
+    /// Render the QR code in the terminal
+    /// 
+    /// BEWARE: terminal will display secret!!
+    pub fn render_qr_terminal(
+        raw_secret: String,
+        issuer: Option<String>,
+        account_name: String,
+    ) -> Result<(), Box<dyn Error>> {
+        let decoded_data = decode(Self::create_qr(raw_secret, issuer, account_name)?)?;
+
+        let img = image::load_from_memory(&decoded_data)?.to_luma8();
+
+        let width = img.width();
+        let height = img.height();
+
+
+        // Determine scaling factor to fit terminal
+        let terminal_width = 80; // Typical terminal width in characters
+        let scale_x = width / terminal_width;
+        let scale_y = scale_x * 2; // Height is doubled for character aspect ratio
+
+        for y in (0..height).step_by(scale_y as usize) {
+            for x in (0..width).step_by(scale_x as usize) {
+                // Sample the block of pixels and determine overall darkness
+                let block_darkness = (0..scale_x).flat_map(|dx| 
+                    (0..scale_y).map({
+                        let img_val = img.clone();
+                        move |dy| {
+                            let px = (x + dx).min(width - 1);
+                            let py = (y + dy).min(height - 1);
+                            img_val.get_pixel(px, py)[0]
+                        }
+                    }
+                    )
+                ).filter(|&p| p < 128).count();
+    
+                let total_pixels = (scale_x * scale_y) as usize;
+                let symbol = match block_darkness as f32 / total_pixels as f32 {
+                    d if d > 0.7 => '█', // Very dark
+                    d if d > 0.4 => '▓', // Medium-dark
+                    d if d > 0.2 => '▒', // Light
+                    _ => ' ',            // Very light
+                };
+
+                print!("{}", symbol);
+            }
+            println!();
+        }
+
+        stdout().flush()?;
+
+        Ok(())
+    }
+
     /// Generates a TOTP token for authentication
     pub fn generate_token(
         raw_secret: String,
@@ -198,6 +253,17 @@ mod tests {
 
         // Delete file
         fs::remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_qr_terminal() {
+        let raw_secret = String::from("SUPERSecretSecretSecret");
+        let issuer = Some(String::from("McCormick"));
+        let account_name = String::from("Account_name");
+        match EasyTotp::render_qr_terminal(raw_secret, issuer, account_name) {
+            Ok(_) => println!("QR code rendered in terminal successfully."),
+            Err(e) => panic!("Error rendering QR code in terminal: {:?}", e),
+        }
     }
 
     #[test]

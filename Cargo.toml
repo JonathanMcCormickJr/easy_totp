@@ -1,6 +1,6 @@
 [package]
 name = "easy_totp"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Jonathan A. McCormick, Jr."]
 license = "MIT"
@@ -10,9 +10,9 @@ documentation = "https://github.com/JonathanMcCormickJr/easy_totp"
 description = "TOTP in Rust, but with just a few simple functions to call."
 
 [dependencies]
-base64 = "0.13.0"
-image = "0.25"
-png = "0.17.16"
+base64 = "0.22.1"
+image = "0.25.8"
+png = "0.18.0"
 rqrr = "0.10.0"
 
 [dependencies.totp-rs]
