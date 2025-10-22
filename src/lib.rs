@@ -87,9 +87,13 @@ enum TerminalQRSize {
     Mini = 1,
 }
 
+/// QRColorMode defines whether the QR code is rendered in direct or inverted colors
+/// For light mode, use Direct; for dark mode, use Inverted. Some QR scanners may still be able to read either way.
 #[repr(u8)]
-enum QRColorMode {
+pub enum QRColorMode {
+    /// Direct colors (black on white during light mode, vice versa for dark mode)
     Direct = 0,
+    /// Inverted colors (white on black during light mode, vice versa for dark mode)
     Inverted = 1,
 }
 
@@ -135,23 +139,26 @@ impl EasyTotp {
         }
     }
 
-
-
-    fn qr_text(size: TerminalQRSize, mode: QRColorMode, raw_secret: String, issuer: Option<String>, account_name: String) -> Result<Vec<String>, Box<dyn Error>> {
-
+    fn qr_text(
+        size: TerminalQRSize,
+        mode: QRColorMode,
+        raw_secret: String,
+        issuer: Option<String>,
+        account_name: String,
+    ) -> Result<Vec<String>, Box<dyn Error>> {
         let mut lines = Vec::new();
         let decoded_data = decode(Self::create_qr(raw_secret, issuer, account_name)?)?;
-    
+
         let img = image::load_from_memory(&decoded_data)?.to_luma8();
-    
+
         let width = img.width();
         let height = img.height();
-    
+
         // Determine scaling factor to fit terminal
         let terminal_width = 100; // Typical terminal width in characters
         let scale_x = width / terminal_width;
         let scale_y = scale_x * 2; // Height is doubled for character aspect ratio
-    
+
         for y in (0..height).step_by(scale_y as usize) {
             let mut line = String::new();
             for x in (0..width).step_by(scale_x as usize) {
@@ -169,7 +176,7 @@ impl EasyTotp {
                     })
                     .filter(|&p| p < 128)
                     .count();
-    
+
                 let total_pixels = (scale_x * scale_y) as usize;
                 let symbol = match block_darkness as f32 / total_pixels as f32 {
                     d if d > 0.7 => '█', // Very dark
@@ -177,37 +184,61 @@ impl EasyTotp {
                     d if d > 0.2 => '▒', // Light
                     _ => ' ',            // Very light
                 };
-    
+
                 line.push(symbol);
             }
             lines.push(line);
         }
-    
+        lines.push(String::from(
+            "Scan the above QR code with your authenticator app to set up TOTP.",
+        ));
+        lines.push(String::from(
+            "BEWARE: this QR code contains your secret key! Handle with care.",
+        ));
+        lines.push(String::from("Useful tips: if scanning fails, try inverting the QR code colors by adjusting your terminal's background color or "));
+        lines.push(String::from("using your mouse to select the entire QR code area. Also, ensure your terminal zoom is set to a level that allows "));
+        lines.push(String::from(
+            "the QR code to be completely visible onscreen.",
+        ));
+
         stdout().flush()?;
 
         match mode {
-            QRColorMode::Direct => {},
+            QRColorMode::Direct => {}
             QRColorMode::Inverted => {
                 for line in &mut lines {
-                    *line = line.chars().map(|c| match c {
-                        '█' => ' ',
-                        '▓' => '░',
-                        '▒' => '▓',
-                        ' ' => '█',
-                        _ => c,
-                    }).collect();
+                    // Skip lines that contain alphanumeric text
+                    if line.chars().any(|c| {
+                        c.is_alphanumeric() || c == ':' || c == '.' || c == '@' || c == '!'
+                    }) {
+                        continue;
+                    }
+
+                    *line = line
+                        .chars()
+                        .map(|c| match c {
+                            '█' => ' ',
+                            '▓' => '░',
+                            '▒' => '▓',
+                            ' ' => '█',
+                            _ => c,
+                        })
+                        .collect();
                 }
-            },
+            }
         }
 
         match size {
-            TerminalQRSize::Full => {Ok(lines)},
+            TerminalQRSize::Full => Ok(lines),
             TerminalQRSize::Mini => {
                 let mut mini_lines = Vec::new();
 
                 for line in lines.chunks(2) {
                     let mut mini_line = String::new();
-                    for (c1, c2) in line[0].chars().zip(line.get(1).unwrap_or(&"".to_string()).chars()) {
+                    for (c1, c2) in line[0]
+                        .chars()
+                        .zip(line.get(1).unwrap_or(&"".to_string()).chars())
+                    {
                         let mini_char = match (c1, c2) {
                             ('█', '█') => '█',
                             ('█', ' ') => '▀',
@@ -227,10 +258,8 @@ impl EasyTotp {
                 }
 
                 Ok(mini_lines)
-            },
+            }
         }
-
-        
     }
 
     /// Creates a new PNG with a QR code
@@ -255,17 +284,42 @@ impl EasyTotp {
         Ok(buffer)
     }
 
+    /// Print the QR code to the terminal
+    ///
+    /// BEWARE: terminal will display secret!!
+    pub fn print_qr_to_teminal(
+        user_mode: QRColorMode,
+        raw_secret: String,
+        issuer: Option<String>,
+        account_name: String,
+    ) -> Result<(), Box<dyn Error>> {
+        match user_mode {
+            QRColorMode::Direct => {
+                Self::render_qr_terminal_full_direct(raw_secret, issuer, account_name)
+            }
+            QRColorMode::Inverted => {
+                Self::render_qr_terminal_full_inverted(raw_secret, issuer, account_name)
+            }
+        }
+    }
+
     /// Render the QR code in the terminal
     ///
     /// BEWARE: terminal will display secret!!
     ///
     /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
-    pub fn render_qr_terminal_full_direct(
+    fn render_qr_terminal_full_direct(
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
     ) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Direct, raw_secret, issuer, account_name)? {
+        for line in Self::qr_text(
+            TerminalQRSize::Full,
+            QRColorMode::Direct,
+            raw_secret,
+            issuer,
+            account_name,
+        )? {
             println!("{}", line);
         }
         Ok(())
@@ -274,40 +328,58 @@ impl EasyTotp {
     /// Render the mini QR code in the terminal
     ///
     /// BEWARE: terminal will display secret!!
-    pub fn render_qr_terminal_mini_direct(
+    fn render_qr_terminal_mini_direct(
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
     ) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Direct, raw_secret, issuer, account_name)? {
+        for line in Self::qr_text(
+            TerminalQRSize::Mini,
+            QRColorMode::Direct,
+            raw_secret,
+            issuer,
+            account_name,
+        )? {
             println!("{}", line);
         }
         Ok(())
     }
 
     /// Render the QR code in the terminal, inverted colors
-    /// 
+    ///
     /// BEWARE: terminal will display secret!!
-    pub fn render_qr_terminal_full_inverted(
+    fn render_qr_terminal_full_inverted(
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
     ) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Inverted, raw_secret, issuer, account_name)? {
+        for line in Self::qr_text(
+            TerminalQRSize::Full,
+            QRColorMode::Inverted,
+            raw_secret,
+            issuer,
+            account_name,
+        )? {
             println!("{}", line);
         }
         Ok(())
     }
 
     /// Render the mini QR code in the terminal, inverted colors
-    /// 
+    ///
     /// BEWARE: terminal will display secret!!
-    pub fn render_qr_terminal_mini_inverted(
+    fn render_qr_terminal_mini_inverted(
         raw_secret: String,
         issuer: Option<String>,
         account_name: String,
     ) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Inverted, raw_secret, issuer, account_name)? {
+        for line in Self::qr_text(
+            TerminalQRSize::Mini,
+            QRColorMode::Inverted,
+            raw_secret,
+            issuer,
+            account_name,
+        )? {
             println!("{}", line);
         }
         Ok(())
@@ -322,8 +394,6 @@ impl EasyTotp {
         Ok(Self::new_totp(raw_secret, issuer, account_name)?.generate_current()?)
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
