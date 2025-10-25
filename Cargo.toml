@@ -1,13 +1,13 @@
 [package]
 name = "easy_totp"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 authors = ["Jonathan A. McCormick, Jr."]
 license = "MIT"
 homepage = "https://github.com/JonathanMcCormickJr/easy_totp"
 repository = "https://github.com/JonathanMcCormickJr/easy_totp"
 documentation = "https://docs.rs/easy_totp/latest/easy_totp/"
-description = "TOTP in Rust, but with just a few simple functions to call."
+description = "TOTP in Rust. Made easy."
 
 [dependencies]
 base64 = "0.22.1"
