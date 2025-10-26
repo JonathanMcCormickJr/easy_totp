@@ -11,11 +11,12 @@
 //! ```rust
 //! use easy_totp::EasyTotp;
 //!
-//! let raw_secret = String::from("SUPERSecretSecretSecret");
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
-//!
-//! let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
+//! 
+//! let et = EasyTotp::new(issuer, account_name).unwrap();
+//! 
+//! let my_qr_code = et.create_qr_png();
 //! ```
 //!
 //! ## Saving that QR code to a file
@@ -25,12 +26,13 @@
 //! use std::fs;
 //! use std::io::Write;
 //!
-//! let raw_secret = String::from("SUPERSecretSecretSecret");
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
 //! let filename = "./test_images/qr_code.png";
+//! 
+//! let et = EasyTotp::new(issuer, account_name).unwrap();
 //!
-//! let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
+//! let my_qr_code = et.create_qr_png();
 //!
 //! match my_qr_code {
 //!     Ok(png_data) => {
@@ -49,20 +51,21 @@
 //! ```rust
 //! use easy_totp::EasyTotp;
 //!
-//! let raw_secret = String::from("SUPERSecretSecretSecret");
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
+//! 
+//! let et = EasyTotp::new(issuer, account_name).unwrap();
 //!
-//! let token = EasyTotp::generate_token(raw_secret, issuer, account_name).unwrap();
+//! let token = et.generate_token().unwrap();
 //! ```
 //!
 
 use totp_rs::{Algorithm, Secret, TOTP};
 
 use base64::decode;
-use image::{ImageBuffer, Luma};
+use rand::{rngs::OsRng, TryRngCore};
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self};
 use std::io::{Cursor, Write, stdout};
 
 #[derive(Debug)]
@@ -98,18 +101,37 @@ pub enum QRColorMode {
     Inverted = 1,
 }
 
+#[derive(Clone)]
 /// `EasyTotp` is a unit-struct to keep track of externally-implemented code.
-pub struct EasyTotp;
+pub struct EasyTotp {
+    raw_secret: String,
+    issuer: Option<String>,
+    account_name: String,
+}
 
 impl EasyTotp {
-    /// Creates a new TOTP instance
-    fn new_totp(
-        raw_secret: String,
+
+    /// Creates a new EasyTotp instance with a randomly generated secret key
+    pub fn new(
         issuer: Option<String>,
         account_name: String,
-    ) -> Result<TOTP, EasyTotpError> {
+    ) -> Result<Self, <OsRng as TryRngCore>::Error> {
+        // Use OsRng to generate a random secret key
+        let mut secret_bytes = [0u8; 20];
+        OsRng.try_fill_bytes(&mut secret_bytes)?;
+        let raw_secret = String::from_utf8_lossy(&secret_bytes).to_string();
+
+        Ok(EasyTotp {
+            raw_secret,
+            issuer,
+            account_name,
+        })
+    }
+
+    /// Creates a new TOTP instance
+    fn new_totp(self) -> Result<TOTP, EasyTotpError> {
         let secret;
-        let result_secret = Secret::Raw(raw_secret.as_bytes().to_vec()).to_bytes();
+        let result_secret = Secret::Raw(self.raw_secret.as_bytes().to_vec()).to_bytes();
 
         if let Ok(okay_secret) = result_secret {
             secret = okay_secret;
@@ -117,7 +139,7 @@ impl EasyTotp {
             return Err(EasyTotpError::new("Failed to parse secret key"));
         }
 
-        let result = TOTP::new(Algorithm::SHA512, 6, 1, 30, secret, issuer, account_name);
+        let result = TOTP::new(Algorithm::SHA512, 6, 1, 30, secret, self.issuer, self.account_name);
 
         if let Ok(okay_result) = result {
             Ok(okay_result)
@@ -127,11 +149,9 @@ impl EasyTotp {
     }
 
     fn create_qr(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
+        et: EasyTotp
     ) -> Result<String, EasyTotpError> {
-        let result = Self::new_totp(raw_secret, issuer, account_name)?.get_qr_base64();
+        let result = Self::new_totp(et)?.get_qr_base64();
 
         if let Ok(okay_result) = result {
             Ok(okay_result)
@@ -143,12 +163,10 @@ impl EasyTotp {
     fn qr_text(
         size: TerminalQRSize,
         mode: QRColorMode,
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
+        et: EasyTotp,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let mut lines = Vec::new();
-        let decoded_data = decode(Self::create_qr(raw_secret, issuer, account_name)?)?;
+        let decoded_data = decode(Self::create_qr(et)?)?;
 
         let img = image::load_from_memory(&decoded_data)?.to_luma8();
 
@@ -271,19 +289,15 @@ impl EasyTotp {
     /// ```rust 
     /// use easy_totp::EasyTotp;
     /// 
-    /// let raw_secret = String::from("SUPERSecretSecretSecret");
     /// let issuer = Some(String::from("McCormick"));
     /// let account_name = String::from("test@test-email.com");
+    /// let et = EasyTotp::new(issuer, account_name).unwrap();
     ///
-    /// let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
+    /// let my_qr_code = et.create_qr_png().unwrap();
     /// ```
-    pub fn create_qr_png(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn create_qr_png(self) -> Result<Vec<u8>, Box<dyn Error>> {
         // Decode the base64 string
-        let decoded_data = decode(Self::create_qr(raw_secret, issuer, account_name)?)?;
+        let decoded_data = decode(Self::create_qr(self)?)?;
 
         // Create a dynamic image from the decoded data
         let image = image::load_from_memory(&decoded_data)?;
@@ -302,10 +316,10 @@ impl EasyTotp {
     /// 
     /// ```rust
     /// use easy_totp::{EasyTotp, QRColorMode};
-    /// let raw_secret = String::from("SUPERSecretSecretSecret");
     /// let issuer = Some(String::from("McCormick"));
     /// let account_name = String::from("test@test-email.com");
-    /// EasyTotp::print_qr_to_teminal(QRColorMode::Inverted, raw_secret, issuer, account_name).unwrap();
+    /// let et = EasyTotp::new(issuer, account_name).unwrap();
+    /// et.print_qr_to_teminal(QRColorMode::Inverted).unwrap();
     /// ```
     ///
     /// That will print out a QR code in the terminal that you can potentially scan with your authenticator app. Your mileage may vary.
@@ -381,18 +395,13 @@ impl EasyTotp {
     /// the QR code to be completely visible onscreen.
     ///                                               
     /// ```
-    pub fn print_qr_to_teminal(
-        user_mode: QRColorMode,
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn print_qr_to_teminal(self, user_mode: QRColorMode) -> Result<(), Box<dyn Error>> {
         match user_mode {
             QRColorMode::Direct => {
-                Self::render_qr_terminal_full_direct(raw_secret, issuer, account_name)
+                Self::render_qr_terminal_full_direct(self)
             }
             QRColorMode::Inverted => {
-                Self::render_qr_terminal_full_inverted(raw_secret, issuer, account_name)
+                Self::render_qr_terminal_full_inverted(self)
             }
         }
     }
@@ -402,17 +411,11 @@ impl EasyTotp {
     /// BEWARE: terminal will display secret!!
     ///
     /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
-    fn render_qr_terminal_full_direct(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn render_qr_terminal_full_direct(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(
             TerminalQRSize::Full,
             QRColorMode::Direct,
-            raw_secret,
-            issuer,
-            account_name,
+            self,
         )? {
             println!("{}", line);
         }
@@ -422,17 +425,11 @@ impl EasyTotp {
     /// Render the mini QR code in the terminal
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_mini_direct(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn render_qr_terminal_mini_direct(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(
             TerminalQRSize::Mini,
             QRColorMode::Direct,
-            raw_secret,
-            issuer,
-            account_name,
+            self,
         )? {
             println!("{}", line);
         }
@@ -442,17 +439,11 @@ impl EasyTotp {
     /// Render the QR code in the terminal, inverted colors
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_full_inverted(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn render_qr_terminal_full_inverted(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(
             TerminalQRSize::Full,
             QRColorMode::Inverted,
-            raw_secret,
-            issuer,
-            account_name,
+            self,
         )? {
             println!("{}", line);
         }
@@ -462,17 +453,11 @@ impl EasyTotp {
     /// Render the mini QR code in the terminal, inverted colors
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_mini_inverted(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn render_qr_terminal_mini_inverted(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(
             TerminalQRSize::Mini,
             QRColorMode::Inverted,
-            raw_secret,
-            issuer,
-            account_name,
+            self,
         )? {
             println!("{}", line);
         }
@@ -480,12 +465,8 @@ impl EasyTotp {
     }
 
     /// Generates a TOTP token for authentication
-    pub fn generate_token(
-        raw_secret: String,
-        issuer: Option<String>,
-        account_name: String,
-    ) -> Result<String, Box<dyn Error>> {
-        Ok(Self::new_totp(raw_secret, issuer, account_name)?.generate_current()?)
+    pub fn generate_token(self) -> Result<String, Box<dyn Error>> {
+        Ok(Self::new_totp(self)?.generate_current()?)
     }
 }
 
@@ -500,12 +481,15 @@ mod tests {
 
     #[test]
     fn test_qr_png() {
-        let raw_secret = String::from("SUPERSecretSecretSecret");
         let issuer = Some(String::from("McCormick"));
         let account_name = String::from("test@test-email.com");
         let filename = "./test_images/qr_code.png";
 
-        let my_qr_code = EasyTotp::create_qr_png(raw_secret, issuer, account_name);
+        let et = EasyTotp::new(issuer, account_name).unwrap();
+
+        let my_qr_code = EasyTotp::create_qr_png(
+            et,
+        );
 
         match my_qr_code {
             Ok(png_data) => {
@@ -527,10 +511,22 @@ mod tests {
         // Decode the grid
         let (meta, content) = grids[0].decode().unwrap();
         assert_eq!(meta.ecc_level, 0);
-        assert_eq!(
-            content,
-            "otpauth://totp/McCormick:test%40test-email.com?secret=KNKVARKSKNSWG4TFORJWKY3SMV2FGZLDOJSXI&algorithm=SHA512&issuer=McCormick"
-        );
+        assert!(content.starts_with("otpauth://totp/McCormick:test%40test-email.com?secret="));
+        assert!(content.contains("&algorithm=SHA512&issuer=McCormick"));
+
+        // Extract and validate the secret parameter
+        let secret_start = content.find("secret=").unwrap() + 7;
+        let secret_end = content.find("&algorithm=").unwrap();
+        let secret = &content[secret_start..secret_end];
+
+        // Ensure the secret is not empty and has reasonable length
+        assert!(!secret.is_empty());
+        assert!(secret.len() >= 20, "Secret should be at least 20 characters long");
+
+        // Verify the secret only contains valid base32 characters (A-Z, 2-7)
+        assert!(secret.chars().all(|c| c.is_ascii_uppercase() || "234567".contains(c)), 
+            "Secret should only contain valid base32 characters");
+
 
         // Delete file
         fs::remove_file(filename).unwrap();
@@ -541,7 +537,14 @@ mod tests {
         let raw_secret = String::from("SUPERSecretSecretSecret");
         let issuer = Some(String::from("McCormick"));
         let account_name = String::from("Account_name");
-        match EasyTotp::render_qr_terminal_full_direct(raw_secret, issuer, account_name) {
+
+        let et = EasyTotp {
+            raw_secret,
+            issuer,
+            account_name,
+        };
+
+        match EasyTotp::render_qr_terminal_full_direct(et) {
             Ok(_) => println!("QR code rendered in terminal successfully."),
             Err(e) => panic!("Error rendering QR code in terminal: {:?}", e),
         }
@@ -552,12 +555,17 @@ mod tests {
         let raw_secret = String::from("SUPERSecretSecretSecret");
         let issuer = Some(String::from("McCormick"));
         let account_name = String::from("test@test-email.com");
+        let et = EasyTotp {
+            raw_secret: raw_secret.clone(),
+            issuer: issuer.clone(),
+            account_name: account_name.clone(),
+        };
 
         let token1 =
-            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+            EasyTotp::generate_token(et.clone())
                 .unwrap();
         let token2 =
-            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+            EasyTotp::generate_token(et.clone())
                 .unwrap();
 
         assert_eq!(token1, token2);
@@ -565,7 +573,7 @@ mod tests {
         thread::sleep(time::Duration::from_secs(30));
 
         let token3 =
-            EasyTotp::generate_token(raw_secret.clone(), issuer.clone(), account_name.clone())
+            EasyTotp::generate_token(et)
                 .unwrap();
         assert_ne!(token1, token3);
 
