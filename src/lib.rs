@@ -13,9 +13,9 @@
 //!
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
-//! 
+//!
 //! let et = EasyTotp::new(issuer, account_name).unwrap();
-//! 
+//!
 //! let my_qr_code = et.create_qr_png();
 //! ```
 //!
@@ -29,7 +29,7 @@
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
 //! let filename = "./test_images/qr_code.png";
-//! 
+//!
 //! let et = EasyTotp::new(issuer, account_name).unwrap();
 //!
 //! let my_qr_code = et.create_qr_png();
@@ -53,7 +53,7 @@
 //!
 //! let issuer = Some(String::from("McCormick"));
 //! let account_name = String::from("test@test-email.com");
-//! 
+//!
 //! let et = EasyTotp::new(issuer, account_name).unwrap();
 //!
 //! let token = et.generate_token().unwrap();
@@ -62,8 +62,8 @@
 
 use totp_rs::{Algorithm, Secret, TOTP};
 
-use base64::decode;
-use rand::{rngs::OsRng, TryRngCore};
+use base64::{Engine as _, engine::general_purpose};
+use rand::{TryRngCore, rngs::OsRng};
 use std::error::Error;
 use std::fmt::{self};
 use std::io::{Cursor, Write, stdout};
@@ -88,6 +88,7 @@ impl EasyTotpError {
 #[repr(u8)]
 enum TerminalQRSize {
     Full = 0,
+    #[allow(dead_code)]
     Mini = 1,
 }
 
@@ -110,7 +111,6 @@ pub struct EasyTotp {
 }
 
 impl EasyTotp {
-
     /// Creates a new EasyTotp instance with a randomly generated secret key
     pub fn new(
         issuer: Option<String>,
@@ -139,7 +139,15 @@ impl EasyTotp {
             return Err(EasyTotpError::new("Failed to parse secret key"));
         }
 
-        let result = TOTP::new(Algorithm::SHA512, 6, 1, 30, secret, self.issuer, self.account_name);
+        let result = TOTP::new(
+            Algorithm::SHA512,
+            6,
+            1,
+            30,
+            secret,
+            self.issuer,
+            self.account_name,
+        );
 
         if let Ok(okay_result) = result {
             Ok(okay_result)
@@ -148,9 +156,7 @@ impl EasyTotp {
         }
     }
 
-    fn create_qr(
-        et: EasyTotp
-    ) -> Result<String, EasyTotpError> {
+    fn create_qr(et: EasyTotp) -> Result<String, EasyTotpError> {
         let result = Self::new_totp(et)?.get_qr_base64();
 
         if let Ok(okay_result) = result {
@@ -166,7 +172,7 @@ impl EasyTotp {
         et: EasyTotp,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let mut lines = Vec::new();
-        let decoded_data = decode(Self::create_qr(et)?)?;
+        let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(et)?)?;
 
         let img = image::load_from_memory(&decoded_data)?.to_luma8();
 
@@ -284,11 +290,11 @@ impl EasyTotp {
     /// Creates a new PNG with a QR code
     ///
     /// BEWARE: PNG image contains secret!!
-    /// 
+    ///
     /// ## Creating a QR code for TOTP setup
-    /// ```rust 
+    /// ```rust
     /// use easy_totp::EasyTotp;
-    /// 
+    ///
     /// let issuer = Some(String::from("McCormick"));
     /// let account_name = String::from("test@test-email.com");
     /// let et = EasyTotp::new(issuer, account_name).unwrap();
@@ -297,7 +303,7 @@ impl EasyTotp {
     /// ```
     pub fn create_qr_png(self) -> Result<Vec<u8>, Box<dyn Error>> {
         // Decode the base64 string
-        let decoded_data = decode(Self::create_qr(self)?)?;
+        let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(self)?)?;
 
         // Create a dynamic image from the decoded data
         let image = image::load_from_memory(&decoded_data)?;
@@ -313,7 +319,7 @@ impl EasyTotp {
     /// Print the QR code to the terminal
     ///
     /// BEWARE: terminal will display secret!!
-    /// 
+    ///
     /// ```rust
     /// use easy_totp::{EasyTotp, QRColorMode};
     /// let issuer = Some(String::from("McCormick"));
@@ -390,19 +396,15 @@ impl EasyTotp {
     /// ██████████████████████████████████████████████████████████████████████████████████████████████████████████████████
     /// Scan the above QR code with your authenticator app to set up TOTP.
     /// BEWARE: this QR code contains your secret key! Handle with care.
-    /// Useful tips: if scanning fails, try inverting the QR code colors by adjusting your terminal's background color or 
-    /// using your mouse to select the entire QR code area. Also, ensure your terminal zoom is set to a level that allows 
+    /// Useful tips: if scanning fails, try inverting the QR code colors by adjusting your terminal's background color or
+    /// using your mouse to select the entire QR code area. Also, ensure your terminal zoom is set to a level that allows
     /// the QR code to be completely visible onscreen.
     ///                                               
     /// ```
     pub fn print_qr_to_teminal(self, user_mode: QRColorMode) -> Result<(), Box<dyn Error>> {
         match user_mode {
-            QRColorMode::Direct => {
-                Self::render_qr_terminal_full_direct(self)
-            }
-            QRColorMode::Inverted => {
-                Self::render_qr_terminal_full_inverted(self)
-            }
+            QRColorMode::Direct => Self::render_qr_terminal_full_direct(self),
+            QRColorMode::Inverted => Self::render_qr_terminal_full_inverted(self),
         }
     }
 
@@ -412,25 +414,18 @@ impl EasyTotp {
     ///
     /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
     fn render_qr_terminal_full_direct(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(
-            TerminalQRSize::Full,
-            QRColorMode::Direct,
-            self,
-        )? {
+        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Direct, self)? {
             println!("{}", line);
         }
         Ok(())
     }
 
+    #[allow(dead_code)]
     /// Render the mini QR code in the terminal
     ///
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_mini_direct(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(
-            TerminalQRSize::Mini,
-            QRColorMode::Direct,
-            self,
-        )? {
+        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Direct, self)? {
             println!("{}", line);
         }
         Ok(())
@@ -440,25 +435,18 @@ impl EasyTotp {
     ///
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_full_inverted(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(
-            TerminalQRSize::Full,
-            QRColorMode::Inverted,
-            self,
-        )? {
+        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Inverted, self)? {
             println!("{}", line);
         }
         Ok(())
     }
 
+    #[allow(dead_code)]
     /// Render the mini QR code in the terminal, inverted colors
     ///
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_mini_inverted(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(
-            TerminalQRSize::Mini,
-            QRColorMode::Inverted,
-            self,
-        )? {
+        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Inverted, self)? {
             println!("{}", line);
         }
         Ok(())
@@ -487,9 +475,7 @@ mod tests {
 
         let et = EasyTotp::new(issuer, account_name).unwrap();
 
-        let my_qr_code = EasyTotp::create_qr_png(
-            et,
-        );
+        let my_qr_code = EasyTotp::create_qr_png(et);
 
         match my_qr_code {
             Ok(png_data) => {
@@ -521,12 +507,18 @@ mod tests {
 
         // Ensure the secret is not empty and has reasonable length
         assert!(!secret.is_empty());
-        assert!(secret.len() >= 20, "Secret should be at least 20 characters long");
+        assert!(
+            secret.len() >= 20,
+            "Secret should be at least 20 characters long"
+        );
 
         // Verify the secret only contains valid base32 characters (A-Z, 2-7)
-        assert!(secret.chars().all(|c| c.is_ascii_uppercase() || "234567".contains(c)), 
-            "Secret should only contain valid base32 characters");
-
+        assert!(
+            secret
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || "234567".contains(c)),
+            "Secret should only contain valid base32 characters"
+        );
 
         // Delete file
         fs::remove_file(filename).unwrap();
@@ -561,20 +553,14 @@ mod tests {
             account_name: account_name.clone(),
         };
 
-        let token1 =
-            EasyTotp::generate_token(et.clone())
-                .unwrap();
-        let token2 =
-            EasyTotp::generate_token(et.clone())
-                .unwrap();
+        let token1 = EasyTotp::generate_token(et.clone()).unwrap();
+        let token2 = EasyTotp::generate_token(et.clone()).unwrap();
 
         assert_eq!(token1, token2);
 
         thread::sleep(time::Duration::from_secs(30));
 
-        let token3 =
-            EasyTotp::generate_token(et)
-                .unwrap();
+        let token3 = EasyTotp::generate_token(et).unwrap();
         assert_ne!(token1, token3);
 
         assert_eq!((6, 6, 6), (token1.len(), token2.len(), token3.len()));
