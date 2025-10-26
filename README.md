@@ -15,7 +15,7 @@ It's okay to send a code from the client to the server for verification, but nev
 To enhance security, consider implementing rate limiting on TOTP verification attempts. This can help prevent brute-force attacks.
 
 ## Features
-- Create TOTP instances.
+- Create TOTP instances with random secret keys.
 - Create TOTP onboarding QR codes.
     - PNG format.
     - Terminal display.
