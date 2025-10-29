@@ -1,6 +1,9 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 #![doc = include_str!("../README.md")]
+#![warn(missing_copy_implementations)]
+#![warn(missing_debug_implementations)]
+#![warn(clippy::pedantic)]
 
 //! `easy_totp` is a crate designed to make it easy to integrate TOTP into your Rust apps.
 //!
@@ -64,11 +67,12 @@ use totp_rs::{Algorithm, Secret, TOTP};
 
 use base64::{Engine as _, engine::general_purpose};
 use rand::{TryRngCore, rngs::OsRng};
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self};
 use std::io::{Cursor, Write, stdout};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct EasyTotpError(String);
 
 impl fmt::Display for EasyTotpError {
@@ -86,7 +90,9 @@ impl EasyTotpError {
 }
 
 #[repr(u8)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 enum TerminalQRSize {
+    #[default]
     Full = 0,
     #[allow(dead_code)]
     Mini = 1,
@@ -95,15 +101,17 @@ enum TerminalQRSize {
 /// QRColorMode defines whether the QR code is rendered in direct or inverted colors
 /// For light mode, use Direct; for dark mode, use Inverted. Some QR scanners may still be able to read either way.
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum QRColorMode {
     /// Direct colors (black on white during light mode, vice versa for dark mode)
     Direct = 0,
+    #[default]
     /// Inverted colors (white on black during light mode, vice versa for dark mode)
     Inverted = 1,
 }
 
-#[derive(Clone)]
 /// `EasyTotp` is a unit-struct to keep track of externally-implemented code.
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct EasyTotp {
     raw_secret: String,
     issuer: Option<String>,
