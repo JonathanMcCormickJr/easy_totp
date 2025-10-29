@@ -90,7 +90,7 @@ impl EasyTotpError {
 }
 
 #[repr(u8)]
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 enum TerminalQRSize {
     #[default]
     Full = 0,
@@ -98,8 +98,8 @@ enum TerminalQRSize {
     Mini = 1,
 }
 
-/// QRColorMode defines whether the QR code is rendered in direct or inverted colors
-/// For light mode, use Direct; for dark mode, use Inverted. Some QR scanners may still be able to read either way.
+/// `QRColorMode` defines whether the QR code is rendered in direct or inverted colors
+/// For light mode, use `Direct`; for dark mode, use `Inverted`. Some QR scanners may still be able to read either way.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum QRColorMode {
@@ -119,7 +119,10 @@ pub struct EasyTotp {
 }
 
 impl EasyTotp {
-    /// Creates a new EasyTotp instance with a randomly generated secret key
+    /// Creates a new `EasyTotp` instance with a randomly generated secret key
+    /// 
+    /// ## Errors
+    /// This function will return an error if the random number generator fails to generate bytes for the secret key.
     pub fn new(
         issuer: Option<String>,
         account_name: String,
@@ -174,6 +177,7 @@ impl EasyTotp {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn qr_text(
         size: TerminalQRSize,
         mode: QRColorMode,
@@ -270,19 +274,14 @@ impl EasyTotp {
                     let mut mini_line = String::new();
                     for (c1, c2) in line[0]
                         .chars()
-                        .zip(line.get(1).unwrap_or(&"".to_string()).chars())
+                        .zip(line.get(1).unwrap_or(&String::new()).chars())
                     {
                         let mini_char = match (c1, c2) {
+                            ('█' | '▓' | '▒', ' ') => '▀',
+                            (' ', '█' | '▓' | '▒') => '▄',
                             ('█', '█') => '█',
-                            ('█', ' ') => '▀',
-                            (' ', '█') => '▄',
-                            (' ', ' ') => ' ',
                             ('▓', '▓') => '▓',
-                            ('▓', ' ') => '▀',
-                            (' ', '▓') => '▄',
                             ('▒', '▒') => '▒',
-                            ('▒', ' ') => '▀',
-                            (' ', '▒') => '▄',
                             _ => ' ',
                         };
                         mini_line.push(mini_char);
