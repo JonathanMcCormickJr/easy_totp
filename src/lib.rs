@@ -90,7 +90,9 @@ impl EasyTotpError {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
 enum TerminalQRSize {
     #[default]
     Full = 0,
@@ -101,7 +103,9 @@ enum TerminalQRSize {
 /// `QRColorMode` defines whether the QR code is rendered in direct or inverted colors
 /// For light mode, use `Direct`; for dark mode, use `Inverted`. Some QR scanners may still be able to read either way.
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
 pub enum QRColorMode {
     /// Direct colors (black on white during light mode, vice versa for dark mode)
     Direct = 0,
@@ -120,7 +124,7 @@ pub struct EasyTotp {
 
 impl EasyTotp {
     /// Creates a new `EasyTotp` instance with a randomly generated secret key
-    /// 
+    ///
     /// ## Errors
     /// This function will return an error if the random number generator fails to generate bytes for the secret key.
     pub fn new(
@@ -308,6 +312,9 @@ impl EasyTotp {
     ///
     /// let my_qr_code = et.create_qr_png().unwrap();
     /// ```
+    ///
+    /// ## Errors
+    /// This function will return an error if the QR code generation or image processing fails.
     pub fn create_qr_png(self) -> Result<Vec<u8>, Box<dyn Error>> {
         // Decode the base64 string
         let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(self)?)?;
@@ -408,6 +415,8 @@ impl EasyTotp {
     /// the QR code to be completely visible onscreen.
     ///                                               
     /// ```
+    /// ## Errors
+    /// This function will return an error if the QR code generation or terminal rendering fails.
     pub fn print_qr_to_teminal(self, user_mode: QRColorMode) -> Result<(), Box<dyn Error>> {
         match user_mode {
             QRColorMode::Direct => Self::render_qr_terminal_full_direct(self),
@@ -422,7 +431,7 @@ impl EasyTotp {
     /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
     fn render_qr_terminal_full_direct(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Direct, self)? {
-            println!("{}", line);
+            println!("{line}");
         }
         Ok(())
     }
@@ -433,7 +442,7 @@ impl EasyTotp {
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_mini_direct(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Direct, self)? {
-            println!("{}", line);
+            println!("{line}");
         }
         Ok(())
     }
@@ -443,7 +452,7 @@ impl EasyTotp {
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_full_inverted(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Inverted, self)? {
-            println!("{}", line);
+            println!("{line}");
         }
         Ok(())
     }
@@ -454,12 +463,15 @@ impl EasyTotp {
     /// BEWARE: terminal will display secret!!
     fn render_qr_terminal_mini_inverted(self) -> Result<(), Box<dyn Error>> {
         for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Inverted, self)? {
-            println!("{}", line);
+            println!("{line}");
         }
         Ok(())
     }
 
     /// Generates a TOTP token for authentication
+    ///
+    /// ## Errors
+    /// This function will return an error if the TOTP generation fails.
     pub fn generate_token(self) -> Result<String, Box<dyn Error>> {
         Ok(Self::new_totp(self)?.generate_current()?)
     }
