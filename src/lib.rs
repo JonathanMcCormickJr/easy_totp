@@ -128,6 +128,16 @@ pub struct EasyTotp {
 
 impl EasyTotp {
     /// Creates a new `EasyTotp` instance with a randomly generated secret key
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust
+    /// use easy_totp::EasyTotp;
+    /// 
+    /// let issuer = Some(String::from("McCormick"));
+    /// let account_name = String::from("account_name");
+    /// let et = EasyTotp::new(issuer, account_name).unwrap();
+    /// ```
     ///
     /// ## Errors
     /// This function will return an error if the random number generator fails to generate bytes for the secret key.
@@ -140,15 +150,19 @@ impl EasyTotp {
         OsRng.try_fill_bytes(&mut secret_bytes)?;
         let raw_secret = String::from_utf8_lossy(&secret_bytes).to_string();
 
+        let issuer = match issuer {
+            Some(iss) => Some(iss.to_string()),
+            None => None,
+        };
         Ok(EasyTotp {
             raw_secret,
             issuer,
-            account_name,
+            account_name: account_name.to_string(),
         })
     }
 
     /// Creates a new TOTP instance
-    fn new_totp(self) -> Result<TOTP, EasyTotpError> {
+    fn new_totp(&self) -> Result<TOTP, EasyTotpError> {
         let secret;
         let result_secret = Secret::Raw(self.raw_secret.as_bytes().to_vec()).to_bytes();
 
@@ -164,8 +178,8 @@ impl EasyTotp {
             1,
             30,
             secret,
-            self.issuer,
-            self.account_name,
+            self.issuer.clone(),
+            self.account_name.clone(),
         );
 
         if let Ok(okay_result) = result {
@@ -175,8 +189,8 @@ impl EasyTotp {
         }
     }
 
-    fn create_qr(et: EasyTotp) -> Result<String, EasyTotpError> {
-        let result = Self::new_totp(et)?.get_qr_base64();
+    fn create_qr(&self) -> Result<String, EasyTotpError> {
+        let result = Self::new_totp(self)?.get_qr_base64();
 
         if let Ok(okay_result) = result {
             Ok(okay_result)
@@ -193,12 +207,12 @@ impl EasyTotp {
     /// This function will return an error if the QR code generation or image processing fails.
     #[allow(clippy::cast_precision_loss)]
     pub fn qr_text(
+        &self,
         size: TerminalQRSize,
         mode: QRColorMode,
-        et: EasyTotp,
     ) -> Result<Vec<String>, Box<dyn Error>> {
         let mut lines = Vec::new();
-        let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(et)?)?;
+        let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(self)?)?;
 
         let img = image::load_from_memory(&decoded_data)?.to_luma8();
 
@@ -325,7 +339,7 @@ impl EasyTotp {
     ///
     /// ## Errors
     /// This function will return an error if the QR code generation or image processing fails.
-    pub fn create_qr_png(self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn create_qr_png(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         // Decode the base64 string
         let decoded_data = general_purpose::STANDARD.decode(Self::create_qr(self)?)?;
 
@@ -427,7 +441,7 @@ impl EasyTotp {
     /// ```
     /// ## Errors
     /// This function will return an error if the QR code generation or terminal rendering fails.
-    pub fn print_qr_to_teminal(self, user_mode: QRColorMode) -> Result<(), Box<dyn Error>> {
+    pub fn print_qr_to_teminal(&self, user_mode: QRColorMode) -> Result<(), Box<dyn Error>> {
         match user_mode {
             QRColorMode::Direct => Self::render_qr_terminal_full_direct(self),
             QRColorMode::Inverted => Self::render_qr_terminal_full_inverted(self),
@@ -439,8 +453,8 @@ impl EasyTotp {
     /// BEWARE: terminal will display secret!!
     ///
     /// This function has been tested and has thus far received mixed results depending on the authenticator app used (Aegis seems to work well, whereas Proton Authenticator has trouble scanning from terminal). Your mileage may vary.
-    fn render_qr_terminal_full_direct(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Direct, self)? {
+    fn render_qr_terminal_full_direct(&self) -> Result<(), Box<dyn Error>> {
+        for line in self.qr_text(TerminalQRSize::Full, QRColorMode::Direct)? {
             println!("{line}");
         }
         Ok(())
@@ -450,8 +464,8 @@ impl EasyTotp {
     /// Render the mini QR code in the terminal
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_mini_direct(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Direct, self)? {
+    fn render_qr_terminal_mini_direct(&self) -> Result<(), Box<dyn Error>> {
+        for line in self.qr_text(TerminalQRSize::Mini, QRColorMode::Direct)? {
             println!("{line}");
         }
         Ok(())
@@ -460,8 +474,8 @@ impl EasyTotp {
     /// Render the QR code in the terminal, inverted colors
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_full_inverted(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Full, QRColorMode::Inverted, self)? {
+    fn render_qr_terminal_full_inverted(&self) -> Result<(), Box<dyn Error>> {
+        for line in self.qr_text(TerminalQRSize::Full, QRColorMode::Inverted)? {
             println!("{line}");
         }
         Ok(())
@@ -471,8 +485,8 @@ impl EasyTotp {
     /// Render the mini QR code in the terminal, inverted colors
     ///
     /// BEWARE: terminal will display secret!!
-    fn render_qr_terminal_mini_inverted(self) -> Result<(), Box<dyn Error>> {
-        for line in Self::qr_text(TerminalQRSize::Mini, QRColorMode::Inverted, self)? {
+    fn render_qr_terminal_mini_inverted(&self) -> Result<(), Box<dyn Error>> {
+        for line in self.qr_text(TerminalQRSize::Mini, QRColorMode::Inverted)? {
             println!("{line}");
         }
         Ok(())
@@ -482,8 +496,8 @@ impl EasyTotp {
     ///
     /// ## Errors
     /// This function will return an error if the TOTP generation fails.
-    pub fn generate_token(self) -> Result<String, Box<dyn Error>> {
-        Ok(Self::new_totp(self)?.generate_current()?)
+    pub fn generate_token(&self) -> Result<String, Box<dyn Error>> {
+        Ok(self.new_totp()?.generate_current()?)
     }
 }
 
@@ -504,7 +518,7 @@ mod tests {
 
         let et = EasyTotp::new(issuer, account_name).unwrap();
 
-        let my_qr_code = EasyTotp::create_qr_png(et);
+        let my_qr_code = et.create_qr_png();
 
         match my_qr_code {
             Ok(png_data) => {
@@ -565,7 +579,7 @@ mod tests {
             account_name,
         };
 
-        match EasyTotp::render_qr_terminal_full_direct(et) {
+        match et.render_qr_terminal_full_direct() {
             Ok(_) => println!("QR code rendered in terminal successfully."),
             Err(e) => panic!("Error rendering QR code in terminal: {:?}", e),
         }
@@ -582,14 +596,14 @@ mod tests {
             account_name: account_name.clone(),
         };
 
-        let token1 = EasyTotp::generate_token(et.clone()).unwrap();
-        let token2 = EasyTotp::generate_token(et.clone()).unwrap();
+        let token1 = et.generate_token().unwrap();
+        let token2 = et.generate_token().unwrap();
 
         assert_eq!(token1, token2);
 
         thread::sleep(time::Duration::from_secs(30));
 
-        let token3 = EasyTotp::generate_token(et).unwrap();
+        let token3 = et.generate_token().unwrap();
         assert_ne!(token1, token3);
 
         assert_eq!((6, 6, 6), (token1.len(), token2.len(), token3.len()));
