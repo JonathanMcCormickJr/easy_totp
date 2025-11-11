@@ -1,6 +1,6 @@
 [package]
 name = "easy_totp"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2024"
 authors = ["Jonathan A. McCormick, Jr."]
 license = "MIT"

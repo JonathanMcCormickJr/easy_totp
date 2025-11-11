@@ -89,13 +89,17 @@ impl EasyTotpError {
     }
 }
 
+/// `TerminalQRSize` defines whether the QR code is rendered in full size or mini size for terminal display
+/// Full size uses standard block characters, while mini size uses half-block characters to reduce height
 #[repr(u8)]
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
-enum TerminalQRSize {
+pub enum TerminalQRSize {
+    /// Full size QR code using standard block characters
     #[default]
     Full = 0,
+    /// Mini size QR code using half-block characters
     #[allow(dead_code)]
     Mini = 1,
 }
@@ -181,8 +185,14 @@ impl EasyTotp {
         }
     }
 
+    /// Generates QR code text for terminal display, but does not actually print it.
+    ///
+    /// BEWARE: output contains secret!!
+    ///
+    /// ## Errors
+    /// This function will return an error if the QR code generation or image processing fails.
     #[allow(clippy::cast_precision_loss)]
-    fn qr_text(
+    pub fn qr_text(
         size: TerminalQRSize,
         mode: QRColorMode,
         et: EasyTotp,
